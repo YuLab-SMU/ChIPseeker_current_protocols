@@ -4,9 +4,9 @@
 
    This respository contains supplemental R markdown files to be paired with our manuscript "Exploring epigenetic data by ChIPseeker" (Current Protocols).
 
-- **ChIPseeker_demo.Rmd**
+- **ChIPseeker_demo.Rmd** 
    
-   Markdown file contains the code for the analysis and figures in the manuscript. Every stage of each protocol is explained in detail.
+   Markdown file contains the code for the analysis and figures in the manuscript. Every stage of each protocol is explained in detail. (will upload this file later)
 
 - **CP_demo_data**
    
