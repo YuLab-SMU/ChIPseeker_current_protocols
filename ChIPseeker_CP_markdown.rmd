@@ -1,0 +1,732 @@
+---
+title: "Exploring epigenomic datasets by ChIPseeker"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+
+##Basic Protocol 1:	Preparation of ChIPseeker and epigenomic datasets.
+
+
+1. Installation of ChIPseeker package
+
+  R can be downloaded and installed from  [https://cran.r-project.org](https://cran.r-project.org). Alternatively, users could download and install Rstudio from [https://www.rstudio.com](https://www.rstudio.com). Then we could open R/Rstudio and install BiocManager. BiocManager is an R package that allows you to install and update Bioconductor packages.
+    
+```{r}
+install.packages("BiocManager")
+```
+  Using BiocManager to install ChIPseeker.
+
+```{r}
+BiocManager::install("ChIPseeker")
+```
+
+  Loading the ChIPseeker library. 
+
+```{r}
+library(ChIPseeker)
+```
+
+
+2. Loading epigenomic datasets.
+
+  All kinds of epigenomics datasets in BED/bedGraph format could be loaded locally. As an example, we used reanalysed CTCF ChIP-seq results in BED format, which were deposited in NCBI database under accession number GSE52457 (Dixon et al., 2015). The data can be downloaded in R with the following command:
+    
+```{r}
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/CTCF_H1.test.bed",destfile = "CTCF_H1.test.bed")
+```
+
+   Generally, the header information is absent in BED format, so we could load the normal BED file by `readPeakFile()`.
+
+```{r}
+ChIPseq_CTCF_demo = readPeakFile("CTCF_H1.test.bed", 
+                                 header = FALSE)
+```
+  Then we could rename the columns to their corresponding names after loading the BED file.
+```{r}
+ChIPseq_CTCF_demo$CTCF_peaks = ChIPseq_CTCF_demo$V4
+ChIPseq_CTCF_demo$level = ChIPseq_CTCF_demo$V5
+ChIPseq_CTCF_demo$V4 = ChIPseq_CTCF_demo$V5 = NULL
+ChIPseq_CTCF_demo
+```
+  We could also add the header information into BED files and load them with header parameter. Here we have prepared the demo files of ChIP-seq (H3K4me1 and H3K4me3), Methyl-seq, DNase-seq, and smRNA datasets that were deposited under the accession number GSE16256 (Lister et al., 2009). These files could be downloaded by the following commands:
+```{r}
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/H3K4me1_H1.test.bed",destfile = "H3K4me1_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/H3K4me3_H1.test.bed",destfile = "H3K4me3_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/DHSs_H1.test.bed",destfile = "DHSs_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/DNAmeth_H1.test.bed",destfile = "DNAmeth_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/smRNA_H1.test.bed",destfile = "smRNA_H1.test.bed")
+```
+  And then we could read these files with the `readPeakFile` function with the parameter of `header=TRUE`.
+
+```{r}
+ChIPseq_H3K4me1_demo1 = readPeakFile("H3K4me1_H1.test.bed",
+                                     header=TRUE)
+ChIPseq_H3K4me3_demo2 = readPeakFile("H3K4me3_H1.test.bed",
+                                     header=TRUE)
+DNaseseq_demo = readPeakFile("DHSs_H1.test.bed",
+                             header=TRUE)
+Methylseq_demo = readPeakFile("DNAmeth_H1.test.bed",
+                              header=TRUE)
+smRNA_demo = readPeakFile("smRNA_H1.test.bed",
+                          header=TRUE)
+Methylseq_demo
+```
+
+  As can be shown, ChIPseeker can handle single base resolution as well as regions of functional epigenetic data.
+
+
+3. Downloading the files from pre-prepared NCBI database 
+
+  ChIPseeker also collects around 17,000 epigenomic results that are deposited in GEO/GSM. By running the getGEOgenomeVersion() function, users can get a quick summary of all the collected species collected in alphabetical order. Here we show five of the species as an example:
+      
+```{r}
+head(getGEOgenomeVersion(),
+     n=5)
+```
+
+  Then, we might obtain the specific information based on the genome version, here we use  *Anolis carolinensis* as an example.
+
+```{r}
+getGEOInfo(genome = "anoCar2")
+```
+
+  The `downloadGEObedFiles()` and `downloadGSMbedFiles()` functions could download the files that have been previously collected within the ChIPseeker. Here we use *Anolis carolinensis* as an example:
+
+```{r}
+downloadGEObedFiles(genome="anoCar2", 
+                    destDir="/path/to/download/location")
+```
+
+  Besides downloading all the files of Anolis carolinensis, we could also specify the files that we needed by the GSM numbers. Here we use GSM1064688 and GSM1064689 as examples.
+
+```{r}
+gsm = c("GSM1064688","GSM1064689")
+downloadGSMbedFiles(gsm, 
+                    destDir="/path/to/download/location")
+```
+
+  After downloading the BED/bedGraph files, we could loaded them using method that described in previous section **2. Loading epigenetic data in BED format**.
+
+---
+
+##Basic Protocol 2:	Annotation of epigenomic datasets 
+
+
+1. Annotation of epigenetic data in accordance with the TxDb database
+
+  We're going to use the files from **Basic Protocol 1** that were analysed using the hg19 reference genome as an example. Firstly, we need to install the TxDb.Hsapiens.UCSC.hg19.knownGene package by BiocManager.
+
+```{r}
+BiocManager::install("TxDb.Hsapiens.UCSC.hg19.knownGene")
+```
+
+  We can load the TxDb object from TxDb.Hsapiens.UCSC.hg19.knownGene package.
+
+```{r}
+library("TxDb.Hsapiens.UCSC.hg19.knownGene")
+TxDb_hg19 = TxDb.Hsapiens.UCSC.hg19.knownGene
+```
+
+  For the genomic annotation, the genomic sites were defined as follows: Promoter; 5' UTR (five prime untranslated regions); 3' UTR (three prime untranslated regions); Exon; Intron; Downstream and Distal Intergenic. Each functional region was assigned to only one of the categories indicated above, in the order listed. Here, we give examples by doing the annotation of the functional epigenomic datasets that are loaded in **Basic Protocol 1**.
+
+```{r}
+ChIPseq_CTCF_demo_anno_default = annotatePeak(ChIPseq_CTCF_demo,
+                                              TxDb=TxDb_hg19)
+```
+
+  After annotation, we could check the brief summary of the annotation results.  
+
+```{r}
+ChIPseq_CTCF_demo_anno_default
+```
+
+  Aside from the brief summary, we could also check the detailed information of the annotation results. Besides the genomic annotation, ChIPseeker calculated the distance to the nearest transcript. The results of the distance were listed in the columns of `transcriptId` and `distanceTo`.
+
+```{r}
+head(as.GRanges(ChIPseq_CTCF_demo_anno_default),
+     5)
+```
+
+  And we could easily save the annotation results by using `as.data.frame()` and `write.table()` functions.
+
+```{r}
+write.table(as.data.frame(ChIPseq_CTCF_demo_anno_default), 
+            file=”/path/to/save/location”)
+```
+
+  If users have their own preference for the annotation priority, the parameter of `genomicAnnotationPriority` can be used to modify it.
+
+```{r}
+ChIPseq_CTCF_demo_anno_change_priority = annotatePeak(ChIPseq_CTCF_demo,
+                                                      TxDb=TxDb_hg19, 
+                                                      genomicAnnotationPriority = c("Exon", "Intron", "5UTR", "3UTR", "Promoter", "Downstream", "Intergenic"))
+```
+ 
+  In addition, ChIPseeker includes the function options() for configuring the genomics regions that users require annotated. 
+
+```{r}
+options(ChIPseeker.ignore_1st_exon = TRUE)
+options(ChIPseeker.ignore_1st_intron = TRUE)
+options(ChIPseeker.ignore_downstream = TRUE)
+options(ChIPseeker.ignore_promoter_subcategory = TRUE)
+ChIPseq_CTCF_demo_anno_user_defined = annotatePeak(ChIPseq_CTCF_demo, 
+                                                   TxDb=TxDb_hg19)
+ChIPseq_CTCF_demo_anno_user_defined
+```
+
+  By default, the promoter is defined from the upstream 3,000 to downstream 3,000 base of transcription start site (TSS). We may modify the promoter by the parameter of `tssRegion` and/or the function of `options()`.
+
+```{r}
+ChIPseq_CTCF_demo_anno_user_defined = annotatePeak(ChIPseq_CTCF_demo, 
+                                                   tssRegion = c(-2000,0),
+                                                   TxDb=TxDb_hg19)
+ChIPseq_CTCF_demo_anno_user_defined
+```
+
+  ChIPseeker provides an optional parameter for the organism level package `OrgDb`, this will output the relecant gene ID into the columns of `ENSEMBL/ENTREZID`, `SYMBOL`, and `GENENAME`. As we're analysis the data from human, the `org.Hs.eg.db` annotation package was used for demonstration.
+    
+```{r}
+ChIPseq_CTCF_demo_anno_gene_name = annotatePeak(ChIPseq_CTCF_demo,
+                                                tssRegion=c(-2000,0),
+                                                TxDb=TxDb_hg19,
+                                                annoDb="org.Hs.eg.db")
+```
+
+  By checking the detailed information, we can find the new columns of `ENSEMBL/ENTREZID`, `SYMBOL`, and `GENENAME` like we mentioned above.
+
+```{r}
+head(as.GRanges(ChIPseq_CTCF_demo_anno_gene_name),
+     5)
+```
+
+  In addition to genomic annotation and the distance to TSS, ChIPseeker offers the genes surrounding the functional epigenetic regions. As an instance, the genes from the upstream 5,000 base to the downstream 5,000 base of CTCF ChIP-seq peaks are annotated.
+
+```{r}  
+ChIPseq_CTCF_demo_anno_flank_5kb = annotatePeak(ChIPseq_CTCF_demo,
+                                                tssRegion=c(-2000,0),
+                                                TxDb=TxDb_hg19,
+                                                addFlankGeneInfo=TRUE,
+                                                flankDistance=5000)
+```
+
+  By checking the detailed information, we can find the new columns of `flank_txIds`, `flank_geneIds`, and `flank_gene_distances`.
+
+```{r}  
+head(as.GRanges(ChIPseq_CTCF_demo_anno_flank_5kb),
+     5)
+```
+
+  Let’s construct the GRangeList object based on previously loaded files. We could use the `annotatePeak()` function for a GRangeList object. 
+
+```{r}
+Epi_data_list = GRangesList(CTCF=ChIPseq_CTCF_demo,
+                            DHSs=DNaseseq_demo,
+                            H3K4me1=ChIPseq_H3K4me1_demo1,
+                            m5C=Methylseq_demo,
+                            smRNA=smRNA_demo)
+peakAnnoList_user_defined = lapply(Epi_data_list, 
+                                   annotatePeak, 
+                                   tssRegion=c(-2000,0), 
+                                   TxDb=TxDb_hg19)
+```
+
+
+2. Annotation of epigenomic datasets using user-defined regions
+
+
+  Any user-defined region in the GRanges object could be used for annotation. The [GenomicRanges package](https://bioconductor.org/packages/devel/bioc/vignettes/GenomicRanges/inst/doc/GenomicRangesIntroduction.html) has a detailed introduction to the GRanges object (Lawrence et al., 2013). As an example, let's make a GRange:
+
+```{r}
+user_defined_GRange = GRanges(
+    seqnames = Rle(c("chr1", "chr10", "chr1", "chr20"), c(1, 3, 1, 5)),
+    ranges = IRanges(start = 55267513:55267522, end = 55714466:55714475),
+    strand = Rle(strand(c("-", "+", "*", "+", "-")), c(1, 2, 1, 4, 2)))
+```
+
+  Now, we could annotate our epigenetic regions by the GRange object above. Please note that if there are multiple functional epigenetic regions that overlap with a defined region, only the neatest functional epigenetic region will be annotated. 
+
+```{r}
+ChIPseq_CTCF_demo_anno_GR = annotatePeak(ChIPseq_CTCF_demo, 
+                                         TxDb=user_defined_GRange)
+ChIPseq_CTCF_demo_anno_GR
+```
+
+  And by the value in the `distanceToTSS` column, we could know the overlapped regions between them.
+
+```{r}
+as.GRanges(ChIPseq_CTCF_demo_anno_GR)[as.GRanges(ChIPseq_CTCF_demo_anno_GR)$distanceToTSS == 0]
+```
+
+  We could also do the annotation with the preloaded functional epigenetic regions. Since the CTCF motif is typically connected with DNA methylation, the CTCF regions and the DNA methylation loci are used as examples. We might annotate CTCF by DNA methylation loci using the `annotatePeak()` function.
+
+```{r}
+CTCF_demo_anno_with_m5C_demo = annotatePeak(Epi_data_list$CTCF,
+                                            TxDb=Epi_data_list$m5C)
+```
+
+##Basic Protocol 3:	Comparison of epigenomic datasets
+
+1. Venn diagram of overlapping genes among epigenomic datasets
+
+  Based on the annotated results from Basic Protocol 2, the Venn diagram of overlapping genes among different types of epigenomic datasets is supported by ChIPseeker. It is known that there is a close relationship between CTCF and DHSs. Here we use them as an instance (Figure 1).
+
+```{r ,fig.height=5,fig.width=5}
+vennplot(
+list(DHSs = as.data.frame(peakAnnoList_user_defined$DHSs)$geneId,
+     CTCF = as.data.frame(peakAnnoList_user_defined$CTCF)$geneId))
+```
+
+  A Venn plot based on the annotated results from a GRangeList object might easily be created with the vennplot() function (Figure 2). Currently, vennplot() only supports the data within five dimensions.
+
+```{r ,fig.height=7}
+peakAnnoList_user_defined_gene = lapply(peakAnnoList_user_defined,
+                                        function(i) as.data.frame(i)$geneId)
+vennplot(peakAnnoList_user_defined_gene)
+```
+
+2.Enrichment analysis of overlap between epigenetic marks
+	
+	Besides direct overlap annotated results of multiple epigenetic marks, we also provide a permutation test between the profiles of them. We used the shuffle function to randomly shift each genomic site of a specified GRange object or BED/bedGraph format on the same chromosome and the size of each feature is kept. The random data was created to estimate the overlap's background null distribution for the permutation test. The probability of detecting extreme overlap between query and target marks is used to calculate the p-value, and several false discovery rate (FDR) adjustments are incorporated.
+	
+In the output results, columns of qSample represents the query epigenomic dataset; tSample represents the target dataset for comparison; nShuffle represents the number of times that the target dataset is shuffled; qLen represents the number of regions in qSample; N_OL represents the number of overlaps between qSample and tSample; chainFile represents the liftover file between the tSample and qSample when their reference genome are different, to check the detail of the lifeover file, please visit UCSC website (https://genome.ucsc.edu/goldenPath/help/hgTracksHelp.html#Liftover). 
+
+```{r,warning=FALSE,fig.height=2,message=FALSE}
+files <- getSampleFiles()
+enrichPeakOverlap(queryPeak = files[[5]],
+                  targetPeak = unlist(files[1:4]),
+                  TxDb = TxDb_hg19,
+                  pAdjustMethod = "BH",
+                  nShuffle = 10,
+                  chainFile = NULL, 
+                  verbose = FALSE)
+```
+
+  Please noted that the shuffle times should be set to 1000 or above for more robust result. Here we only shuffle ten times for demonstration.
+
+
+##Basic Protocol 4:	Visualization of annotated results 
+
+
+1. Visualization of genomic annotated results 
+
+  We'll show you how to use ChIPseeker to visualize annotated results. In a nutshell, plots based on the annotation column from Basic Protocol 2 will be made in a variety of methods.
+  
+  Pie plot (Figure 3).
+```{r,warning=FALSE,fig.height=2,message=FALSE}
+plotAnnoPie(ChIPseq_CTCF_demo_anno_default)
+```
+  
+  Bar plot (Figure 4) :
+```{r,warning=FALSE,fig.height=3,message=FALSE}
+plotAnnoBar(ChIPseq_CTCF_demo_anno_user_defined)
+```
+
+  The Venn diagram, which is presented as a pie chart, can be used to visualize both the full annotation and their partially overlapping results in a vennpie plot (Figure 5):
+```{r,warning=FALSE,fig.height=5,fig.fullwidth=TRUE,message=FALSE}
+vennpie(ChIPseq_CTCF_demo_anno_default)
+```
+
+  UpSet plot which used to visualized the full overlapping results (Figure 6) :
+```{r,warning=FALSE,message=FALSE}
+upsetplot(ChIPseq_CTCF_demo_anno_default)
+```
+
+
+  We could also add the vennpie plot to the UpSet plot by setting the parameter of vennpie=TRUE. (Figure 7):
+```{r,warning=FALSE,fig.height=7,message=FALSE}
+upsetplot(ChIPseq_CTCF_demo_anno_default, vennpie=TRUE)
+```
+
+  In addition, the plotAnnoBar() function supports a list of GRange objects (Figure 8):
+
+```{r,warning=FALSE,fig.height=4,message=FALSE}
+plotAnnoBar(peakAnnoList_user_defined)
+```
+
+***
+
+2. Visualization of the relative distribution of epigenomic datasets in relation to a specific set of loci	
+
+  Besides the plots that reflect the annotation of genomic regions. ChIPseeker also supports the bar plot for the relative distribution of the epigenomic dataset to the nearest TSS (Figure 9):
+
+```{r,warning=FALSE,fig.height=2,message=FALSE}
+plotDistToTSS(ChIPseq_CTCF_demo_anno_default,
+              title="Relative distribution of CTCF peaks to TSS")
+```
+
+  We can make the bar plot by using the GRangeList object (Figure 10):
+
+```{r ,warning=FALSE,fig.height=4,message=FALSE}
+plotDistToTSS(peakAnnoList_user_defined,
+              title="Relative distribution to TSS")
+```
+
+
+  We can also visualize the annotated results of user-defined regions. Here we used the relative distribution of CTCF peaks to DNA methylation loci as an example (Figure 11):
+
+```{r ,warning=FALSE,fig.height=2,message=FALSE}
+plotDistToTSS(CTCF_demo_anno_with_m5C_demo,
+              title="Relative distribution of CTCF peaks to m5C loci")
+```
+
+---
+
+
+##Basic Protocol 5:	Functional enrichment analysis of epigenomic datasets
+    
+
+1. Installing and loading the clusterProfiler library.
+
+```{r}
+BiocManager::install("clusterProfiler")
+
+```
+
+```{r}
+library("clusterProfiler")
+```
+
+2. Extraction of the genes related to epigenetic marks
+
+  a. Gene extraction from annotated results
+To do the functional analysis of the annotated results from Basic Protocol 2, we could directly extract their ID by column of geneId. 
+
+```{r,  warning=FALSE, message=FALSE}
+ChIPseq_CTCF_demo_anno_default_genes = as.data.frame(peakAnnoList_user_defined$CTCF)$geneId
+```
+
+  We could get their IDs from the annotated results of a GRangeList object in order to do the functional analysis by comparing different groups of genes.
+
+```{r,  warning=FALSE, message=FALSE}
+peakAnnoList_user_defined_genes = lapply(peakAnnoList_user_defined, 
+                                         function(i) as.data.frame(i)$geneId)
+```
+
+  b. Gene extraction from the genes that related to epigenetic marks in many-to-many mode . 
+In addition to the one-to-many annotated results, ChIPseeker also offers extracting genes in a many-to-many mode. The function of seq2gene()could extract these kinds of genes with the files that were loaded from Basic Protocol 1 and it can extract the interaction of epigenetic marks with genes, promoters, and flanking regions. We are retrieving the interaction between the peaks of H3K4me3 as an example here. 
+
+```{r,  warning=FALSE, message=FALSE}
+ChIPseq_H3K4me3_demo2_genes = seq2gene(ChIPseq_H3K4me3_demo2, 
+                                      tssRegion = c(-1000, 1000), 
+                                      flankDistance = 500, 
+                                      TxDb=TxDb_hg19)
+```
+
+  As mentioned in section a, we could also extract the genes in many-to-many mode with a list of epigenomic datasets. 
+  
+```{r,  warning=FALSE, message=FALSE}
+Epi_data_list_genes = lapply(Epi_data_list,
+                             function(i) seq2gene(i, 
+                                                  tssRegion = c(-1000, 1000), 
+                                                  flankDistance = 500, 
+                                                  TxDb=TxDb_hg19))
+```  
+  
+3. Enrichment analysis of the genes of interest
+
+  After getting the genes, we could pass them for functional enrichment analysis. As mentioned above, our team has developed several packages for different kinds of enrichment analysis. Please see https://yulab-smu.top/biomedical-knowledge-mining-book/ for more information on these tools. Here we will use the GO analysis of CTCF peaks as a demonstration (Wu et al., 2021).
+
+```{r,  warning=FALSE, message=FALSE}
+ChIPseq_CTCF_demo_anno_default_enrichGO = enrichGO(gene = ChIPseq_CTCF_demo_anno_default_genes, 
+                                                   OrgDb = "org.Hs.eg.db")
+```
+
+  In addition to the enrichment analysis of a set of genes, the function of compareCluster()offered by clusterProfiler could be used to perform the enrichment analysis on multiple sets of epigenetic regions (Wu et al., 2021).
+
+```{r,  warning=FALSE, message=FALSE, fig.height= 7, fig.width= 12}
+Epi_data_list_genes_enrichGO = compareCluster(geneCluster = peakAnnoList_user_defined_genes,
+                                              fun = "enrichGO", 
+                                              pvalueCutoff = 0.05,
+                                              OrgDb = "org.Hs.eg.db")
+```
+
+4. Enrichment results visualization
+
+	In order to have a better view of the functional enrichment results, we also developed several plots for different kinds of enrichment results (Wu et al., 2021). Here we only use dotplot() to do the demonstration (Figure 12). 
+
+```{r,  warning=FALSE, message=FALSE}
+dotplot(Epi_data_list_genes_enrichGO, 
+        title = "GO Enrichment Analysis")
+```
+
+---
+
+##Basic Protocol 6:	Genome-wide and locus-specific distribution of epigenomic datasets
+
+1. Installing and loading Bioconductor packages
+
+  Installing the ggplot2 and RColorBrewer libraries.
+
+```{r,  warning=FALSE, message=FALSE,eval=FALSE,echo=TRUE}
+BiocManager::install("ggplot2")
+BiocManager::install("RColorBrewer")
+```
+
+  Loading the ggplot2 and RColorBrewer libraries.
+
+```{r,  warning=FALSE, message=FALSE}
+library(ggplot2)
+library(RColorBrewer)
+```
+
+
+2. Visualization of genome-wide distribution of the epigenomic datasets
+
+
+Genome-wide distribution of a single file that is loaded in Basic Protocol 1 (Figure 13).
+```{r fig.height=10}
+covplot(ChIPseq_CTCF_demo, weightCol="level", 
+        title="Genome-wide distribution of CTCF peaks")
+```
+
+  To get the genome-wide distribution of multiple files, we could plot the overall distribution of the GRangeList object (Figure 14). 
+
+```{r,fig.height=15,fig.width=20, warning=FALSE, message=FALSE,fig.fullwidth=TRUE}
+covplot(Epi_data_list, 
+        weightCol="level", 
+        title="Genome-wide distribution") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+
+  Also, we could separate the GRangeList in multi-panel by facet_grid() (Figure 15).
+
+```{r,fig.height=16, fig.width=20, warning=FALSE, message=FALSE,fig.fullwidth=TRUE}
+covplot(Epi_data_list, 
+        weightCol="level",
+        title="Genome-wide distribution") + facet_grid(chr ~ .id,scales="free") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+
+
+3. Visualization of locus-specific distribution of the epigenomic datasets
+
+  We could make the locus-specific plot by covplot()(Figure 16).
+
+```{r, single-covplot-view, warning=FALSE, message=FALSE, fig.height=2}
+covplot(ChIPseq_CTCF_demo, 
+        weightCol = "level", 
+        title = "locus-specific distribution of CTCF peaks", 
+        chrs = c("chr2","chr4"), 
+        xlim = c(1e6, 8e6))
+```
+
+  Aside from the plot of the GRange object, we can also construct a locus-specific plot of GRangeList (Figure 17).
+
+```{r multiple-covplot-view, warning=FALSE, message=FALSE, fig.height=2, fig.fullwidth=TRUE}
+covplot(Epi_data_list, 
+        weightCol="level", 
+        title=" locus-specific distribution", 
+        chrs=c("chr16","chr17"), 
+        xlim=c(4.2e7, 4.8e7)) + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+
+  We might also use the facet_grid() to plot the locus-specific in a multi-panel way (Figure 18).
+
+```{r multiple-covplot-view-multi-panel,warning=FALSE, message=FALSE,fig.height=5,fig.width=15}
+covplot(Epi_data_list, weightCol="level",
+        title=" locus-specific distribution",
+        chrs=c("chr16","chr17"),
+        xlim=c(4.2e7, 4.8e7)) + facet_grid(chr ~ .id,scales="free") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+
+---
+
+
+##Basic Protocol 7:	Heatmaps and metaplots of epigenomic datasets
+
+
+1. Preparing the tagMatrix 
+
+   a. For a set of biological loci
+To obtain the plots around the functional loci, we need to prepare the desired data by getTagMatrix(). We could choose the type of start_site and end_site, and the by of gene, transcript, exon, intron, 3UTR or 5UTR .
+
+```{r ,warning=FALSE,fig.width=2,message=FALSE,results = FALSE,fig.show=TRUE}
+H3K4me3_TES_tagMatrix = getTagMatrix(ChIPseq_H3K4me3_demo2,
+                                     TxDb=TxDb_hg19, type = "end_site",
+                                     upstream = 3000,
+                                     downstream = 3000,
+                                     by = "gene")
+```
+
+  To obtain the plots around the functional loci, we must first prepare the windows we want by using getBioRegion(). 
+
+```{r ,warning=FALSE,fig.width=4,message=FALSE,results = FALSE,fig.show=TRUE}
+TSS = getBioRegion(TxDb=TxDb_hg19,
+                   upstream=3000,
+                   downstream=3000,
+                   by = "gene",
+                   type = "start_site")
+```
+
+  Then we could prepare the tagMatrix by getTagMatrix(). In addition, we can also prepare the epigenomic datasets by using lapply().
+
+```{r ,warning=FALSE,results = FALSE,fig.show=TRUE}
+Epi_data_list_TSS_tagMatrix = lapply(Epi_data_list,
+                                     getTagMatrix,
+                                     windows=TSS)
+```
+
+   b. For a set of biological regions
+In addition to the functional loci, we need to prepare the tagMatrix in the functional regions and their surrounding regions. The getBioRegion()can also be used to prepare our interested regions by setting the parameter of type=”body”. 
+
+```{r ,warning=FALSE,fig.width=4,message=FALSE,results = FALSE,fig.show=TRUE}
+geneBody = getBioRegion(TxDb=TxDb_hg19,
+                        by = "gene",
+                        type = "body")
+```
+
+  Since functional regions may vary in size, users can specify the normalizing length with the parameter nbin. 
+```{r,warning=FALSE,fig.fullwidth=TRUE,message=FALSE,results = FALSE,fig.show=TRUE}
+ChIPseq_H3K4me3_demo2_geneBody_tagMatrix = getTagMatrix(ChIPseq_H3K4me3_demo2,
+                                                        windows=geneBody,
+                                                        nbin = 500,
+                                                        upstream=2000, 
+                                                        downstream=2000)
+```
+
+  Then we could prepare the tagMatrix by getTagMatrix(). In addition, we can also prepare the epigenomic datasets by using lapply(). 
+```{r,warning=FALSE,fig.fullwidth=TRUE,message=FALSE,results = FALSE,fig.show=TRUE}
+Epi_data_list_geneBody_tagMatrix = lapply(Epi_data_list,
+                                          getTagMatrix,
+                                          windows=geneBody,
+                                          nbin = 800,
+                                          upstream=1000,
+                                          downstream=1000)
+```
+
+2. Heatmaps
+
+  a. For a set of biological loci
+  
+  We can make a heatmap plot of our selected regions (Figure 19).
+```{r ,warning=FALSE,fig.width=4,message=FALSE,results = FALSE,fig.show=TRUE}
+tagHeatmap(H3K4me3_TES_tagMatrix, 
+           xlim=c(-3000, 3000), 
+           title = "H3K4me3 peaks around TES")
+```
+
+  The tagHeatmap() function also supports a list of tagMatrix (Figure 20).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE,results = FALSE,fig.show=TRUE}
+tagHeatmap(Epi_data_list_TSS_tagMatrix, 
+           xlim=c(-3000, 3000), 
+           color=brewer.pal(length(Epi_data_list_TSS_tagMatrix), 
+                            "Dark2"))
+```
+
+  TSS are the most commonly used point positions in this mode. ChIPseeker offers a one-line function peakHeatmap() for generating the heatmap graphic around the TSS regions from the data loaded in Basic Protocol 1 (Figure 21). 
+
+```{r ,warning=FALSE,fig.width=4,message=FALSE,results = FALSE,fig.show=TRUE}
+peakHeatmap(ChIPseq_H3K4me3_demo2, 
+            weightCol = "level", 
+            TxDb=TxDb_hg19, 
+            upstream=2000, 
+            downstream=2000,
+            title = "H3K4me3 peaks around TSS")
+```
+
+  The peakHeatmap() function supports generating the heatmap of a list of BED files (Figure 22) (Pemberton et al., 2014; Urbanucci et al., 2012).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+peakHeatmap(files, 
+            TxDb=TxDb_hg19, 
+            upstream=2000, 
+            downstream=2000)
+```
+
+Currently, ChIPseeker only supports the heatmap plot for a set of biological loci.
+
+
+  2. Metaplots
+  
+  a. For a set of biological loci
+
+  We can make a metaplot around our selected biological loci by (Figure 23). To estimate the variation of statistics obtained from the same data by performing computations on the data itself. The optional parameter conf features the method for bootstrap confidence intervals.
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotAvgProf(H3K4me3_TES_tagMatrix, 
+            xlim=c(-3000, 3000), 
+            origin_label="TES", 
+            conf = 0.95, 
+            resample = 500)
+```
+
+  The plotAvgProf() function also supports a list of tagMatrix (Figure 24).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotAvgProf(Epi_data_list_TSS_tagMatrix, 
+            xlim=c(-3000, 3000), 
+            ylab = "Count Frequency")
+```
+
+  Like the heatmaps, ChIPseeker also provides a one-line function call plotAvgProf2() to generate the metaplots of the epigenomic datasets that are loaded in Basic Protocol 1 (Figure 25).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotAvgProf2(ChIPseq_H3K4me3_demo2, 
+             weightCol = "level", 
+             TxDb=TxDb_hg19, 
+             upstream=2000, 
+             downstream=2000, 
+             conf = 0.95, 
+             resample=500, 
+             facet="row")
+```
+  
+  The plotAvgProf2() function supports generating the heatmap of a list of BED files (Figure 26).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotAvgProf2(files, 
+             TxDb=TxDb_hg19, 
+             upstream=2000, 
+             downstream=2000, 
+             conf = 0.95)
+```
+
+  b. For a set of biological regions
+  
+  We can make a metaplot of our selected biological regions by (Figure 27).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotPeakProf(ChIPseq_H3K4me3_demo2_geneBody_tagMatrix, 
+             conf = 0.95)
+```
+
+  The plotPeakProf() function also supports a list of tagMatrix (Figure 28).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotPeakProf(Epi_data_list_geneBody_tagMatrix, 
+             conf = 0.95)
+```
+
+  And plotPeakProf2() function is a one-line function to make metaplots within the scale-regions (Figure 29).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotPeakProf2(peak = ChIPseq_H3K4me3_demo2, 
+              upstream = 2000, 
+              downstream = 1000, 
+              conf = 0.95, 
+              by = "gene", 
+              type = "body", 
+              nbin = 800, 
+              TxDb = TxDb_hg19, 
+              weightCol = "level", 
+              ignore_strand = F)
+```
+
+  And plotPeakProf2() function supports generating the metaplots of a list of BED files (Figure 30).
+
+```{r ,warning=FALSE,fig.width=6,message=FALSE,results = FALSE,fig.show=TRUE}
+plotPeakProf2(peak = files, 
+              upstream = 2000, 
+              downstream = 2000, 
+              conf = 0.9,
+              by = "gene", 
+              type = "body", 
+              nbin = 200, 
+              TxDb = TxDb_hg19, 
+              ignore_strand = F, 
+              facet = "row")
+```

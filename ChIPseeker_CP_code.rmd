@@ -1,0 +1,369 @@
+---
+title: "Exploring epigenomic datasets by ChIPseeker"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# BP1 - Preparation of ChIPseeker and epigenomic datasets
+1
+```{r}
+install.packages("BiocManager")
+BiocManager::install("ChIPseeker")
+library(ChIPseeker)
+```
+2
+```{r}
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/CTCF_H1.test.bed",destfile = "CTCF_H1.test.bed")
+ChIPseq_CTCF_demo = readPeakFile("CTCF_H1.test.bed", 
+                                 header = FALSE)
+ChIPseq_CTCF_demo$CTCF_peaks = ChIPseq_CTCF_demo$V4
+ChIPseq_CTCF_demo$level = ChIPseq_CTCF_demo$V5
+ChIPseq_CTCF_demo$V4 = ChIPseq_CTCF_demo$V5 = NULL
+ChIPseq_CTCF_demo
+```
+3
+```{r}
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/H3K4me1_H1.test.bed",destfile = "H3K4me1_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/H3K4me3_H1.test.bed",destfile = "H3K4me3_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/DNAmeth_H1.test.bed",destfile = "DNAmeth_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/DHSs_H1.test.bed",destfile = "DHSs_H1.test.bed")
+download.file("https://raw.githubusercontent.com/YuLab-SMU/ChIPseeker_current_protocols/master/CP_demo_data/smRNA_H1.test.bed",destfile = "smRNA_H1.test.bed")
+ChIPseq_H3K4me1_demo1 = readPeakFile("H3K4me1_H1.test.bed",
+                                     header=TRUE)
+ChIPseq_H3K4me3_demo2 = readPeakFile("H3K4me3_H1.test.bed",
+                                     header=TRUE)
+DNaseseq_demo = readPeakFile("DHSs_H1.test.bed",
+                             header=TRUE)
+Methylseq_demo = readPeakFile("DNAmeth_H1.test.bed",
+                              header=TRUE)
+smRNA_demo = readPeakFile("smRNA_H1.test.bed",
+                          header=TRUE)
+Methylseq_demo
+```
+4
+```{r}
+head(getGEOgenomeVersion(),
+     n=5)
+getGEOInfo(genome = "anoCar2")
+downloadGEObedFiles(genome="anoCar2",
+                    destDir="/path/to/download/location")
+gsm = c("GSM1064688","GSM1064689")
+downloadGSMbedFiles(gsm, 
+                    destDir="/path/to/download/location")
+
+```
+
+# BP2 - Annotation of epigenomic datasets
+5
+```{r}
+BiocManager::install("TxDb.Hsapiens.UCSC.hg19.knownGene")
+library("TxDb.Hsapiens.UCSC.hg19.knownGene")
+TxDb_hg19 = TxDb.Hsapiens.UCSC.hg19.knownGene
+```
+6
+```{r}
+ChIPseq_CTCF_demo_anno_default = annotatePeak(ChIPseq_CTCF_demo,
+                                              TxDb=TxDb_hg19)
+ChIPseq_CTCF_demo_anno_default
+head(as.GRanges(ChIPseq_CTCF_demo_anno_default),
+     5)
+write.table(as.data.frame(ChIPseq_CTCF_demo_anno_default),
+            file="/path/to/save/location")
+```
+7
+```{r}
+ChIPseq_CTCF_demo_anno_change_priority = annotatePeak(ChIPseq_CTCF_demo,
+                                                      TxDb=TxDb_hg19, 
+                                                      genomicAnnotationPriority = c("Exon", "Intron", "5UTR", "3UTR", "Promoter", "Downstream", "Intergenic"))
+options(ChIPseeker.ignore_1st_exon = TRUE)
+options(ChIPseeker.ignore_1st_intron = TRUE)
+options(ChIPseeker.ignore_downstream = TRUE)
+options(ChIPseeker.ignore_promoter_subcategory = TRUE)
+ChIPseq_CTCF_demo_anno_with_options = annotatePeak(ChIPseq_CTCF_demo,
+                                                   TxDb=TxDb_hg19)
+ChIPseq_CTCF_demo_anno_with_options 
+ChIPseq_CTCF_demo_anno_user_defined = annotatePeak(ChIPseq_CTCF_demo, 
+                                                   tssRegion = c(-2000,0),
+                                                   TxDb=TxDb_hg19)
+ChIPseq_CTCF_demo_anno_user_defined
+ChIPseq_CTCF_demo_anno_gene_name = annotatePeak(ChIPseq_CTCF_demo,
+                                                tssRegion=c(-2000,0),
+                                                TxDb=TxDb_hg19,
+                                                annoDb="org.Hs.eg.db")
+head(as.GRanges(ChIPseq_CTCF_demo_anno_gene_name),
+     5)
+ChIPseq_CTCF_demo_anno_flank_5kb = annotatePeak(ChIPseq_CTCF_demo,
+                                                tssRegion=c(-2000,0),
+                                                TxDb=TxDb_hg19,
+                                                addFlankGeneInfo=TRUE,
+                                                flankDistance=5000)
+head(as.GRanges(ChIPseq_CTCF_demo_anno_flank_5kb),
+     5)
+```
+8
+```{r}
+Epi_data_list = GRangesList(CTCF=ChIPseq_CTCF_demo,
+                            DHSs=DNaseseq_demo,
+                            H3K4me1=ChIPseq_H3K4me1_demo1,
+                            m5C=Methylseq_demo,
+                            smRNA=smRNA_demo)
+peakAnnoList_user_defined = lapply(Epi_data_list, 
+                                   annotatePeak, 
+                                   tssRegion=c(-2000,0), 
+                                   TxDb=TxDb_hg19)
+```
+9
+```{r}
+user_defined_GRange = GRanges(seqnames = Rle(c("chr1", "chr10", "chr1", "chr20"), c(1, 3, 1, 5)),
+                              ranges = IRanges(start = 55267513:55267522, end = 55714466:55714475),
+                              strand = Rle(strand(c("-", "+", "*", "+", "-")), c(1, 2, 1, 4, 2)))
+ChIPseq_CTCF_demo_anno_GR  = annotatePeak(ChIPseq_CTCF_demo,
+                                          TxDb=user_defined_GRange)
+ChIPseq_CTCF_demo_anno_GR 
+as.GRanges(ChIPseq_CTCF_demo_anno_GR )[as.GRanges(ChIPseq_CTCF_demo_anno_GR )$distanceToTSS == 0]
+CTCF_demo_anno_with_m5C_demo = annotatePeak(Epi_data_list$CTCF,
+                                            TxDb=Epi_data_list$m5C)
+```
+# BP3 - Comparison of epigenomic datasets
+10
+```{r}
+vennplot(list(DHSs = as.data.frame(peakAnnoList_user_defined$DHSs)$geneId,
+              CTCF = as.data.frame(peakAnnoList_user_defined$CTCF)$geneId))
+peakAnnoList_user_defined_gene = lapply(peakAnnoList_user_defined,
+                                        function(i) as.data.frame(i)$geneId)
+vennplot(peakAnnoList_user_defined_gene)
+```
+11
+```{r}
+files <- getSampleFiles()
+enrichPeakOverlap(queryPeak = files[[5]],
+                  targetPeak = unlist(files[1:4]),
+                  TxDb = TxDb_hg19,
+                  pAdjustMethod = "BH",
+                  nShuffle = 10,
+                  chainFile = NULL, 
+                  verbose = FALSE)
+```
+
+# BP4 - Visualization of annotated results 
+12
+```{r}
+plotAnnoPie(ChIPseq_CTCF_demo_anno_default)
+plotAnnoBar(ChIPseq_CTCF_demo_anno_user_defined)
+vennpie(ChIPseq_CTCF_demo_anno_default)
+upsetplot(ChIPseq_CTCF_demo_anno_default)
+upsetplot(ChIPseq_CTCF_demo_anno_default, vennpie=TRUE)
+plotAnnoBar(peakAnnoList_user_defined)
+```
+13
+```{r}
+plotDistToTSS(ChIPseq_CTCF_demo_anno_default,
+              title="Relative distribution of CTCF peaks to TSS")
+plotDistToTSS(peakAnnoList_user_defined,
+              title="Relative distribution to TSS")
+plotDistToTSS(CTCF_demo_anno_with_m5C_demo,
+              title="Relative distribution of CTCF peaks to m5C loci")
+```
+
+# BP5 - Functional enrichment analysis of epigenomic datasets 
+14
+```{r}
+BiocManager::install("clusterProfiler")
+library("clusterProfiler")
+```
+15
+```{r}
+ChIPseq_CTCF_demo_anno_default_genes = as.data.frame(peakAnnoList_user_defined$CTCF)$geneId
+peakAnnoList_user_defined_genes = lapply(peakAnnoList_user_defined, 
+                                         function(i) as.data.frame(i)$geneId)
+```
+16
+```{r}
+ChIPseq_H3K4me3_demo2_genes = seq2gene(ChIPseq_H3K4me3_demo2, 
+                                      tssRegion = c(-1000, 1000), 
+                                      flankDistance = 500, 
+                                      TxDb=TxDb_hg19)
+Epi_data_list_genes = lapply(Epi_data_list,
+                             function(i) seq2gene(i, 
+                                                  tssRegion = c(-1000, 1000), 
+                                                  flankDistance = 500, 
+                                                  TxDb=TxDb_hg19))
+```
+17
+```{r}
+ChIPseq_CTCF_demo_anno_default_enrichGO = enrichGO(gene = ChIPseq_CTCF_demo_anno_default_genes, 
+                                                   OrgDb = "org.Hs.eg.db")
+Epi_data_list_genes_enrichGO = compareCluster(geneCluster = peakAnnoList_user_defined_genes,
+                                              fun = "enrichGO", 
+                                              pvalueCutoff = 0.05,
+                                              OrgDb = "org.Hs.eg.db")
+```
+18
+```{r}
+dotplot(Epi_data_list_genes_enrichGO, 
+        title = "GO Enrichment Analysis")
+```
+
+# BP6 - Genome-wide and locus-specific distribution of epigenomic datasets
+19
+```{r}
+BiocManager::install("ggplot2")
+BiocManager::install("RColorBrewer")
+library(ggplot2)
+library(RColorBrewer)
+```
+20
+```{r}
+covplot(ChIPseq_CTCF_demo, weightCol="level", 
+        title="Genome-wide distribution of CTCF peaks")
+```
+21
+```{r}
+covplot(Epi_data_list, 
+        weightCol="level", 
+        title="Genome-wide distribution") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+covplot(Epi_data_list, 
+        weightCol="level",
+        title="Genome-wide distribution") + facet_grid(chr ~ .id,scales="free") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+22
+```{r}
+covplot(ChIPseq_CTCF_demo, 
+        weightCol = "level", 
+        title = "locus-specific distribution of CTCF peaks", 
+        chrs = c("chr2","chr4"), 
+        xlim = c(1e6, 8e6))
+```
+23
+```{r}
+covplot(Epi_data_list, 
+        weightCol="level", 
+        title=" locus-specific distribution", 
+        chrs=c("chr16","chr17"), 
+        xlim=c(4.2e7, 4.8e7)) + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+covplot(Epi_data_list, weightCol="level",
+        title=" locus-specific distribution",
+        chrs=c("chr16","chr17"),
+        xlim=c(4.2e7, 4.8e7)) + facet_grid(chr ~ .id,scales="free") + labs(color="Library type",fill="Library type") + scale_fill_brewer(palette = "Set2") + scale_color_brewer(palette = "Set2")
+```
+
+# BP7 - Heatmaps an metaplots of epigenomic datasets
+24
+```{r}
+H3K4me3_TES_tagMatrix = getTagMatrix(ChIPseq_H3K4me3_demo2,
+                                     TxDb=TxDb_hg19, type = "end_site",
+                                     upstream = 3000,
+                                     downstream = 3000,
+                                     by = "gene")
+```
+25
+```{r}
+TSS = getBioRegion(TxDb=TxDb_hg19,
+                   upstream=3000,
+                   downstream=3000,
+                   by = "gene",
+                   type = "start_site")
+```
+26
+```{r}
+Epi_data_list_TSS_tagMatrix = lapply(Epi_data_list,
+                                     getTagMatrix,
+                                     windows=TSS)	
+```
+27
+```{r}
+geneBody = getBioRegion(TxDb=TxDb_hg19,
+                        by = "gene",
+                        type = "body")
+ChIPseq_H3K4me3_demo2_geneBody_tagMatrix = getTagMatrix(ChIPseq_H3K4me3_demo2,
+                                                        windows=geneBody,
+                                                        nbin = 500,
+                                                        upstream=2000, 
+                                                        downstream=2000)
+```
+28
+```{r}
+Epi_data_list_geneBody_tagMatrix = lapply(Epi_data_list,
+                                          getTagMatrix,
+                                          windows=geneBody,
+                                          nbin = 800,
+                                          upstream=1000,
+                                          downstream=1000)
+```
+29
+```{r}
+tagHeatmap(H3K4me3_TES_tagMatrix, 
+           xlim=c(-3000, 3000), 
+           title = "H3K4me3 peaks around TES")
+tagHeatmap(Epi_data_list_TSS_tagMatrix, 
+           xlim=c(-3000, 3000), 
+           color=brewer.pal(length(Epi_data_list_TSS_tagMatrix), 
+                            "Dark2"))
+peakHeatmap(ChIPseq_H3K4me3_demo2, 
+            weightCol = "level", 
+            TxDb=TxDb_hg19, 
+            upstream=2000, 
+            downstream=2000,
+            title = "H3K4me3 peaks around TSS")
+peakHeatmap(files, 
+            TxDb=TxDb_hg19, 
+            upstream=2000, 
+            downstream=2000)
+```
+30
+```{r}
+plotAvgProf(H3K4me3_TES_tagMatrix, 
+            xlim=c(-3000, 3000), 
+            origin_label="TES", 
+            conf = 0.95, 
+            resample = 500)
+plotAvgProf(Epi_data_list_TSS_tagMatrix, 
+            xlim=c(-3000, 3000), 
+            ylab = "Count Frequency")
+plotAvgProf2(ChIPseq_H3K4me3_demo2, 
+             weightCol = "level", 
+             TxDb=TxDb_hg19, 
+             upstream=2000, 
+             downstream=2000, 
+             conf = 0.95, 
+             resample=500, 
+             facet="row")
+plotAvgProf2(files, 
+             TxDb=TxDb_hg19, 
+             upstream=2000, 
+             downstream=2000, 
+             conf = 0.95)
+
+```
+31
+```{r}
+plotPeakProf(ChIPseq_H3K4me3_demo2_geneBody_tagMatrix, 
+             conf = 0.95)
+plotPeakProf(Epi_data_list_geneBody_tagMatrix, 
+             conf = 0.95)
+plotPeakProf2(peak = ChIPseq_H3K4me3_demo2, 
+              upstream = 2000, 
+              downstream = 1000, 
+              conf = 0.95, 
+              by = "gene", 
+              type = "body", 
+              nbin = 800, 
+              TxDb = TxDb_hg19, 
+              weightCol = "level", 
+              ignore_strand = F)
+plotPeakProf2(peak = files, 
+              upstream = 2000, 
+              downstream = 2000, 
+              conf = 0.9, 
+              by = "gene", 
+              type = "body", 
+              nbin = 200, 
+              TxDb = TxDb_hg19, 
+              ignore_strand = F, 
+              facet = "row")
+```
+
