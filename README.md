@@ -2,7 +2,7 @@
 
 [ChIPseeker](https://github.com/YuLab-SMU/ChIPseeker) is an R package for the analysis and visualization of epigenetics data. 
 
-   This respository contains supplemental R markdown files to be paired with our manuscript "Exploring epigenetic data by ChIPseeker" (Current Protocols).
+   This respository contains R markdown files to be paired with our manuscript "Exploring epigenomic datasets by ChIPseeker" (Current Protocols).
 
 - **ChIPseeker_CP_markdown.rmd** 
    
